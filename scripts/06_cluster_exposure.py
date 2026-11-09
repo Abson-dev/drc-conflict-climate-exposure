@@ -57,6 +57,8 @@ def load_acled() -> pd.DataFrame:
         sys.exit("No ACLED file found. Run 01_acled_download_api.py or 02_acled_clean.py first.")
     ev = pd.read_csv(files[-1], parse_dates=["event_date"], low_memory=False)
     n0 = len(ev)
+    if "dup_flag" in ev:  # exact duplicates flagged by 02_acled_clean.py
+        ev = ev[ev.dup_flag == 0]
     ev = ev[ev.geo_precision <= C.MAX_GEO_PRECISION].reset_index(drop=True)
     print(f"ACLED: {n0:,} events, {len(ev):,} kept with geo_precision <= {C.MAX_GEO_PRECISION}")
     return ev
@@ -95,21 +97,20 @@ def event_pairs(cl: pd.DataFrame, ev: pd.DataFrame) -> pd.DataFrame:
 
 def summarise(p: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
     """Event counts by type and fatalities per buffer, grouped by `keys`."""
+    types = {"Battles": "battles", "Violence against civilians": "vac",
+             "Explosions/Remote violence": "explosions", "Riots": "riots", "Protests": "protests"}
+    p = p.assign(violent=p.event_type.isin(C.VIOLENT_TYPES).astype(int))
     out = []
-    p = p.assign(violent=p.event_type.isin(C.VIOLENT_TYPES))
     for r in C.BUFFERS_KM:
         q = p[p.dist_km <= r]
         g = q.groupby(keys)
-        s = pd.DataFrame({
-            f"acled_events_{r}km": g.size(),
-            f"acled_violent_{r}km": g.violent.sum(),
-            f"acled_battles_{r}km": g.event_type.apply(lambda x: (x == "Battles").sum()),
-            f"acled_vac_{r}km": g.event_type.apply(lambda x: (x == "Violence against civilians").sum()),
-            f"acled_explosions_{r}km": g.event_type.apply(lambda x: (x == "Explosions/Remote violence").sum()),
-            f"acled_riots_{r}km": g.event_type.apply(lambda x: (x == "Riots").sum()),
-            f"acled_protests_{r}km": g.event_type.apply(lambda x: (x == "Protests").sum()),
-            f"acled_fatalities_{r}km": g.fatalities.sum(),
-        })
+        by_type = q.groupby(keys + ["event_type"]).size().unstack("event_type", fill_value=0)
+        by_type = by_type.reindex(columns=list(types), fill_value=0)
+        by_type.columns = [f"acled_{types[c]}_{r}km" for c in by_type.columns]
+        s = pd.concat([g.size().rename(f"acled_events_{r}km"),
+                       g.violent.sum().rename(f"acled_violent_{r}km"),
+                       by_type,
+                       g.fatalities.sum().rename(f"acled_fatalities_{r}km")], axis=1)
         out.append(s)
     return pd.concat(out, axis=1)
 
@@ -173,6 +174,7 @@ def worldpop_buffers(cl: pd.DataFrame) -> pd.DataFrame | None:
         return None
     with rasterio.open(next((wp / str(years[0])).glob("cod_pop_*.tif"))) as src:
         T, (H, W) = src.transform, src.shape
+    from scipy import sparse
     rmax = max(C.BUFFERS_KM)
     nbh = []  # per cluster: flat pixel indices and distances within rmax
     for la, lo in cl[["lat", "lon"]].values:
@@ -185,7 +187,16 @@ def worldpop_buffers(cl: pd.DataFrame) -> pd.DataFrame | None:
         h = np.sin((p2 - p1) / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(np.radians(plon - lo) / 2) ** 2
         d = 2 * R_EARTH * np.arcsin(np.sqrt(h))
         k = d <= rmax
-        nbh.append(((rr[k] * W + cc[k]), d[k]))
+        nbh.append(((rr[k] * W + cc[k]).astype("int64"), d[k].astype("float32")))
+
+    # one sparse (cluster x pixel) indicator matrix per buffer: pop = S @ raster
+    lens = np.array([len(i) for i, _ in nbh])
+    rows = np.repeat(np.arange(len(nbh)), lens)
+    cols = np.concatenate([i for i, _ in nbh])
+    dist = np.concatenate([d for _, d in nbh])
+    S = {r: sparse.csr_matrix((np.ones((dist <= r).sum()), (rows[dist <= r], cols[dist <= r])),
+                              shape=(len(nbh), H * W)) for r in C.BUFFERS_KM}
+    del rows, cols, dist, nbh
 
     out = []
     for y in years:
@@ -203,7 +214,7 @@ def worldpop_buffers(cl: pd.DataFrame) -> pd.DataFrame | None:
             if tot is None:
                 continue
             for r in C.BUFFERS_KM:
-                rec[f"wp_{name}_{r}km"] = [tot[i[d <= r]].sum() for i, d in nbh]
+                rec[f"wp_{name}_{r}km"] = S[r] @ tot
         df = pd.DataFrame(rec, index=cl.index)
         df["year"] = y
         out.append(df)

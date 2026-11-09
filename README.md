@@ -25,7 +25,8 @@ Every table is saved as both `.csv` and Stata `.dta`.
 │   ├── 06_cluster_exposure.py   cluster-level exposure (10/25/50 km)
 │   ├── 07_era5land_admin3.py    temperature by Admin 3
 │   ├── 08_worldpop_admin3.py    population by Admin 3
-│   └── 09_validate_acled_ucdp.py ACLED vs UCDP GED comparison
+│   ├── 09_validate_acled_ucdp.py ACLED vs UCDP GED comparison
+│   └── 10_acled_location_exposure.py exposure around ACLED event locations (no survey needed)
 ├── docs/
 │   ├── data_sources.md          sources, versions, licences, access steps
 │   ├── methods.md               how each measure is built, variable list
@@ -65,7 +66,9 @@ python scripts/06_cluster_exposure.py     # needs data/clusters/<file>
 python scripts/07_era5land_admin3.py
 python scripts/08_worldpop_admin3.py
 python scripts/09_validate_acled_ucdp.py
+python scripts/10_acled_location_exposure.py
 ```
+Script 06 needs survey clusters. Script 10 does not: it uses the 5,268 distinct ACLED event locations as its points.
 
 ## Outputs (`output/`)
 
@@ -73,6 +76,9 @@ python scripts/09_validate_acled_ucdp.py
 |---|---|---|
 | `cluster_year_exposure` | cluster × year, 1997–2025 | ACLED counts by type and fatalities; WorldPop population (all ages, under-5, 0–14, women 15–49) and events per 100k; ERA5 temperature mean, anomaly and SD anomaly. Each measure is given for 10, 25 and 50 km. |
 | `cluster_interview_exposure` | cluster | The same measures for the 12 months before the interview. Produced only if interview dates are supplied. |
+| `acled_locations` | ACLED location (5,268) | `loc_id`, coordinates, place and admin names, event totals |
+| `acled_location_year_exposure` | location × year, 1997–2025 | ACLED counts by type and fatalities, WorldPop population and events per 100k, for 10, 25 and 50 km |
+| `acled_event_exposure` | ACLED event (43,275) | Event attributes and the population within 10, 25 and 50 km in the event year, i.e. the people exposed |
 | `era5land_admin3_monthly` | Admin 3 × month, 1991–2025 | Temperature (°C), anomaly against 1991–2020, SD anomaly |
 | `era5land_admin3_year` | Admin 3 × year | Mean, warmest month, coolest month, anomaly, SD anomaly |
 | `worldpop_admin3_year` | Admin 3 × year, 2015–2025 | Population, 40 age-sex groups, under-5, 0–14, 15–64, 65+, women 15–49, sex ratio, dependency ratio, density |

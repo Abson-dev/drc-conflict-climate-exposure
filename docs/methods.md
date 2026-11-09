@@ -36,6 +36,14 @@ All settings are in [`scripts/config.py`](../scripts/config.py): years, buffers 
 - **Borders:** ACLED and WorldPop cover only the DRC, so buffers that cross a border leave out the events and people on the other side (Goma–Gisenyi, Bukavu–Cyangugu, Kinshasa–Brazzaville, Uvira–Bujumbura).
 - **Coverage over time:** ACLED's coverage grows over time, from about 150 sources before 2010 to about 2,460 after 2018. Comparisons across years should account for this (see [validation.md](validation.md)).
 
+## 1b. Exposure around ACLED event locations (`10_acled_location_exposure.py`)
+- **Points:** the 5,268 distinct coordinates of ACLED events with `geo_precision` ≤ 2. Each gets a `loc_id` and the most frequent place and admin names at those coordinates.
+- **Counts and population:** the same as for clusters (section 1). The 41 duplicates flagged with `dup_flag` are excluded from the counts.
+- **Population before 2015:** years 1997–2014 use the 2015 WorldPop population, flagged with `wp_year = 2015` and `wp_imputed = 1`. Drop those rows, or use them only as a fixed denominator, if this matters for the analysis.
+- **Event file:** `acled_event_exposure` gives the population within 10, 25 and 50 km of each event. It is left blank for the 680 events placed at a province centroid (precision 3).
+- **Place names:** ACLED codes urban neighbourhoods as separate locations, for example "Goma - Unspecified", "Goma - Mugunga" and "Goma - Ndosho". Different places can also share a name, so select locations by `loc_id` or coordinates, not by name.
+- **Check:** for Goma in 2025, there were 314 events within 10 km, 1,729 deaths within 50 km, and 0.91 million people within 10 km (Rwanda excluded).
+
 ## 2. Admin 3 temperature (`07_era5land_admin3.py`)
 - **Weighting:** each ERA5-Land land cell is intersected with each OCHA Admin 3 polygon in an equal-area projection (EPSG:6933). The unit's value is the overlap-area-weighted mean of its cells (median 40 cells per unit). Urban communes smaller than one cell still get a value.
 - **Weight file:** the weights are saved in `data/raw/boundaries/ocha/era5_admin3_weights.csv`.
